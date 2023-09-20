@@ -6,4 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-evm-rs-emulator = "0.1.1"
+colored = "2.0.4"
+evm-rs-emulator = "0.1.4"
+huff_lexer = "0.3.0"
+huff_utils = "0.1.0"
