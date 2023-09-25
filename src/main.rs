@@ -1,75 +1,90 @@
-use colored::*;
-use evm_rs_emulator::Runner;
-use evm_rs_emulator::bytes::_hex_string_to_bytes;
-use huff_lexer::Lexer;
-use huff_utils::{
-    token::{self, *},
-};
+// Std imports
 use std::{env, fs, vec};
 
-// Colored output
+// Colored
+use colored::*;
+
+// Huff imports
+use huff_lexer::Lexer;
+use huff_utils::prelude::{ToIRBytecode, EVMVersion};
+use huff_utils::token::*;
+use huff_parser::Parser;
+
+// evm-rs-emulator imports
+use evm_rs_emulator::Runner;
+use evm_rs_emulator::bytes::_hex_string_to_bytes;
 
 fn main() -> Result<(), String> {
     let args: Vec<String> = env::args().collect();
     let mut debug_level: Option<u8> = None;
+    let mut evm_version: EVMVersion = EVMVersion::default();
 
     if args.contains(&"--debug".to_string()) {
         debug_level = Some(255);
+    }
+
+    if args.contains(&"--evm".to_string()) {
+        // fetch the string provided version
+        let version = args[args.iter().position(|x| x == "--evm").unwrap() + 1].clone();
+        evm_version = EVMVersion::from(version);
     }
 
     // The bytecode path is not an argument, but the last argument
     if args.len() > 1 {
         // Read the huff file
         let file_path = &args[args.len() - 1];
+        // Remove file name from path
+        let path_elem = file_path.split("/").collect::<Vec<&str>>();
+        let base_path = path_elem[..path_elem.len() - 1].join("/");
+        let base_path = format!("./{}", base_path);
+
         let huff_source =
             fs::read_to_string(file_path).expect("Something went wrong reading the file");
-        let mut bytecode = vec![];
+        // let mut bytecode = vec![];
+
+        // Colored debug
+        println!("{}: \n{}\n", "Huff source".blue(), huff_source);
 
         // Create a lexer
-        let mut lexer = Lexer::new(huff_source.as_str());
+        let lexer = Lexer::new(huff_source.as_str());
 
-        // Create a runner
-        let mut runner = create_runner(debug_level);
+        // Create a parser
+        let tokens = lexer.into_iter().map(|x| x.unwrap()).collect::<Vec<Token>>();
+        let mut parser = Parser::new(tokens, Some(base_path));
 
-        loop {
-            let token = lexer.next().unwrap().unwrap();
-            if token.kind.to_string().len() == 64 {
-                bytecode.push(0x7f);
-                // For each byte in the hex string push it to the bytecode
-                for byte in _hex_string_to_bytes(token.kind.to_string().as_str()) {
-                    bytecode.push(byte);
-                }
+        // Color debug
+        println!("{}: \n{:?}\n", "Tokens".blue(), parser.tokens);
 
-                runner.bytecode = bytecode.clone();
-                let res = runner.interpret_op_code(runner.bytecode[runner.pc as usize]);
-                if res.is_err() {
-                    println!("Error: {}", format!("{:?}", res).red());
-                    return Ok(());
-                }
-            }
+        // Parse into AST
+        let unwrapped_contract = parser.parse().unwrap();
 
-            if token.kind.to_string().len() == 2 {
-                let hex_string = token.kind.to_string();
-                bytecode.push(u8::from_str_radix(&hex_string, 16).unwrap());
+        // Color debug
+        println!("{}: \n {:?}\n", "AST".blue(), unwrapped_contract);
 
-                runner.bytecode = bytecode.clone();
-                let res = runner.interpret_op_code(runner.bytecode[runner.pc as usize]);
-                if res.is_err() {
-                    println!("Error: {}", format!("{:?}", res).red());
-                    return Ok(());
-                }
-            }
+        // Color debug
+        println!("{}", "Statement".blue());
 
-            if token.kind == TokenKind::Whitespace {
-                if lexer.peek_n_chars(0).contains("\n") {
-                    println!("=== New Line ===");
-                }
-            }
-
-            if token.kind == TokenKind::Eof {
-                break;
+        // print all statements of all macros
+        for macro_ in unwrapped_contract.macros.iter() {
+            for statement in macro_.statements.iter() {
+                println!("{:?}", statement);
             }
         }
+        println!();
+
+        parser.reset();
+        let res = parser.parse_imports();
+        
+        // Color debug
+        println!("{}: \n{:?}\n", "Imports".blue(), res);
+
+        let ir_bytecode = unwrapped_contract.macros[0].to_irbytecode(&evm_version);
+
+        // Color debug
+        println!("{}: \n{:?}\n", "Bytecode".blue(), ir_bytecode.unwrap().0);
+
+        // println!("{:?}", unwrapped_contract.macros[0]);
+
     } else {
         print_help();
         return Ok(());

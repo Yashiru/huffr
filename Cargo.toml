@@ -8,5 +8,11 @@ edition = "2021"
 [dependencies]
 colored = "2.0.4"
 evm-rs-emulator = "0.1.4"
-huff_lexer = "0.3.0"
-huff_utils = "0.1.0"
+
+# Huff git sub module
+[dependencies.huff_parser]
+path = "lib/huff-rs/huff_parser"
+[dependencies.huff_lexer]
+path = "lib/huff-rs/huff_lexer"
+[dependencies.huff_utils]
+path = "lib/huff-rs/huff_utils"
