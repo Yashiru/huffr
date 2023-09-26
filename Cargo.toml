@@ -16,3 +16,5 @@ path = "lib/huff-rs/huff_parser"
 path = "lib/huff-rs/huff_lexer"
 [dependencies.huff_utils]
 path = "lib/huff-rs/huff_utils"
+[dependencies.huff_core]
+path = "lib/huff-rs/huff_core"
