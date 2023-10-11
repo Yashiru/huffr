@@ -23,7 +23,7 @@ pub struct Interpreter {
     pub lines: Vec<Vec<Token>>,
     pub tokens: Vec<Token>,
     pub runner: Runner,
-    pub huff_output: String,
+    pub huff_output: Vec<String>,
     pub evm_version: EVMVersion,
 }
 
@@ -47,13 +47,18 @@ impl Interpreter {
             file_path: String::from(file_path),
             runner,
             tokens: Vec::new(),
-            huff_output: String::new(),
+            huff_output: Vec::new(),
             huff_source: String::new(),
             lines: Vec::new(),
             evm_version,
         };
 
-        instance.compute_lines();
+        instance.extract_lines();
+
+        // split the huff source code into lines and store it in huff_output
+        instance.huff_output = instance.huff_source.split("\n").map(|x| x.to_string()).collect();
+
+        println!("{} {:?}", "Tokens".green(), instance.huff_output);
 
         instance
     }
@@ -106,7 +111,7 @@ impl Interpreter {
         }
     }
 
-    fn compute_lines(&mut self) {
+    fn extract_lines(&mut self) {
         // Extract the tokens from the source code
         self.huff_source = std::fs::read_to_string(self.file_path.as_str()).unwrap();
         let lexer = Lexer::new(self.huff_source.as_str());
@@ -186,6 +191,22 @@ impl Interpreter {
         println!("{} {:?}", "Stack".green(), self.runner.stack);
         println!("\n\n\n\n");
 
+        // Write the stack to the output
+        if line.len() == 0 {return};
+
+        // Add stack at the end of the line
+        let line_string= self.huff_source[line[0].span.start..line[line.len() - 1].span.end+1].to_string();
+        for i in 0..self.huff_output.len() {
+            println!("{} {:?}", line_string, line);
+
+            if self.huff_output[i].contains(&line_string) {
+                self.huff_output[i] = format!(
+                    "{}{}",
+                    self.huff_output[i].clone(),
+                    format!(" // {:?}", self.runner.stack)
+                );
+            }
+        }
     }
 
     fn process_push(litteral: &str) -> (u8, Vec<u8>) {
