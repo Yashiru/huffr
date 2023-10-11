@@ -1,5 +1,5 @@
 // Std imports
-use std::{env, fs};
+use std::env;
 
 // Local module
 mod core_module;
@@ -31,14 +31,9 @@ fn main() -> Result<(), String> {
         // Read the huff file
         let file_path = &args[args.len() - 1];
 
-        let mut interpreter = Interpreter::new(
-            file_path.as_str(),
-            evm_version,
-            debug_level
-        );
+        let mut interpreter = Interpreter::new(file_path.as_str(), evm_version, debug_level);
 
         interpreter.interpret();
-
     } else {
         print_help();
         return Ok(());
