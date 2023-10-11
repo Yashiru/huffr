@@ -4,7 +4,10 @@ use std::sync::Arc;
 use huff_core::Compiler;
 
 // evm-rs-emulator imports
-use evm_rs_emulator::Runner;
+use evm_rs_emulator::{
+    debug::vec_to_hex_string,
+    Runner,
+};
 
 // Colored
 use colored::*;
@@ -14,8 +17,8 @@ use huff_utils::{
     token::{Token, TokenKind},
 };
 
-pub struct Interpreter<'a> {
-    pub file_path: &'a str,
+pub struct Interpreter {
+    pub file_path: String,
     pub huff_source: String,
     pub lines: Vec<Vec<Token>>,
     pub tokens: Vec<Token>,
@@ -24,7 +27,7 @@ pub struct Interpreter<'a> {
     pub evm_version: EVMVersion,
 }
 
-impl<'a> Interpreter<'a> {
+impl Interpreter {
     /// Creates a new instance of the interpreter with the given parameters.
     ///
     /// # Arguments
@@ -37,11 +40,11 @@ impl<'a> Interpreter<'a> {
     /// # Returns
     ///
     /// A new instance of the interpreter.
-    pub fn new(file_path: &'a str, evm_version: EVMVersion, debug_level: Option<u8>) -> Self {
-        let runner = Runner::_default(debug_level.unwrap());
+    pub fn new(file_path: &str, evm_version: EVMVersion, debug_level: Option<u8>) -> Self {
+        let runner = Runner::_default(debug_level.unwrap_or(0));
 
         let mut instance = Self {
-            file_path,
+            file_path: String::from(file_path),
             runner,
             tokens: Vec::new(),
             huff_output: String::new(),
@@ -86,11 +89,9 @@ impl<'a> Interpreter<'a> {
         let res = compiler.grab_contracts();
 
         let mut i = 0;
-        for line in self.lines.iter() {
+        for line in self.lines.clone().iter() {
             println!("{} {}", "Line".green(), i);
-            for token in line.iter() {
-                println!("{:?}", token)
-            }
+            self.process_line(line);
 
             i += 1;
         }
@@ -107,7 +108,7 @@ impl<'a> Interpreter<'a> {
 
     fn compute_lines(&mut self) {
         // Extract the tokens from the source code
-        self.huff_source = std::fs::read_to_string(self.file_path).unwrap();
+        self.huff_source = std::fs::read_to_string(self.file_path.as_str()).unwrap();
         let lexer = Lexer::new(self.huff_source.as_str());
         self.tokens = lexer
             .into_iter()
@@ -133,5 +134,91 @@ impl<'a> Interpreter<'a> {
             }
         }
         self.lines = lines;
+    }
+
+    fn process_line(&mut self, line: &Vec<Token>) {
+        for token in line.iter() {
+            match token.kind {
+                TokenKind::Opcode(_) => {
+                    // Convert token kind to string
+                    let opcode = token.kind.to_string();
+
+                    // Convert the opcode hex string into a u8
+                    let opcode = u8::from_str_radix(opcode.as_str(), 16).unwrap();
+
+                    self.runner
+                        .bytecode
+                        .push(opcode);
+                }
+                TokenKind::Label(_) => {}
+                TokenKind::BuiltinFunction(_) => {}
+                TokenKind::Literal(_) => {
+                    let push = Self::process_push(&token.kind.to_string());
+
+                    // Push the opcode
+                    self.runner.bytecode.push(push.0);
+
+                    // Push the bytes
+                    if push.0 != 0x5f {
+                        for byte in push.1 {
+                            self.runner.bytecode.push(byte);
+                        }
+                    }
+                }
+                TokenKind::Num(_) => {}
+                TokenKind::Ident(_) => {}
+                TokenKind::Macro => {
+                    self.setup_new_macro();
+                    return;
+                }
+                _ => {}
+            }
+        }
+        println!("{}", vec_to_hex_string(self.runner.bytecode.to_owned()));
+
+        let _ = self.runner.interpret(
+            self.runner.bytecode.to_owned(),
+            self.runner.debug_level,
+            true,
+        );
+
+        // print stack
+        println!("{} {:?}", "Stack".green(), self.runner.stack);
+        println!("\n\n\n\n");
+
+    }
+
+    fn process_push(litteral: &str) -> (u8, Vec<u8>) {
+        let mut stripped = litteral.trim_start_matches('0');
+        if stripped.is_empty() {
+            stripped = "0";
+        }
+
+        // Make stripped odd length
+        let ood_stripped = if stripped.len() % 2 != 0 {
+            format!("0{}", stripped)
+        } else {
+            stripped.to_string()
+        };
+
+        // Convert the string into a vector of bytes
+        let hex_val = hex::decode(ood_stripped).unwrap();
+
+        // Return push0
+        if stripped == "0" {
+            return (0x5f, hex_val);
+        }
+
+        // Calculate the required length in bytes
+        let len = (stripped.len() + 1) / 2;
+
+        if len > 32 {}
+
+        // Convert the length into the opcode
+        ((0x60 + len - 1) as u8, hex_val)
+    }
+
+    fn setup_new_macro(&mut self) {
+        self.runner = Runner::_default(self.runner.debug_level.unwrap());
     }
 }

@@ -1649,6 +1649,7 @@ version = "0.1.0"
 dependencies = [
  "colored",
  "evm-rs-emulator",
+ "hex",
  "huff_core",
  "huff_lexer",
  "huff_parser",
